@@ -1,26 +1,35 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --ink-blue: rgb(46, 64, 148);
+  --cream: rgb(246, 243, 235);
+  --oak-brown: rgb(71, 41, 18);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+html,
+body {
+  height: 100%;
+  margin: 0;
+  background: var(--oak-brown);
+  color: var(--ink-blue);
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@keyframes typingBounce {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Prefer web fonts loaded via next/font variables */
+:root {
+  --font-typewriter-stack: var(--font-typewriter), "American Typewriter",
+    "Courier New", Courier, monospace;
+  --font-handwriting-stack: var(--font-handwriting), "Bradley Hand", Caveat,
+    cursive;
 }
