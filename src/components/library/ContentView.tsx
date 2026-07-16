@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { colors } from "@/lib/tokens";
+import { playPaperSfx, preloadPaperSfx } from "@/lib/sfx";
 import type {
   BookEntry,
   BookEntryRecord,
@@ -44,6 +45,22 @@ export function ContentView({
   const isMainCard = homeState.kind === "mainCard";
   const isShelf = homeState.kind === "shelf";
 
+  const snapToShelf = useCallback(() => {
+    playPaperSfx();
+    setHomeState({ kind: "shelf" });
+    setCardBaseY(
+      (containerRef.current?.clientHeight ?? 800) * 0.76
+    );
+    setDragOffset(0);
+  }, []);
+
+  const snapToMainCard = useCallback(() => {
+    playPaperSfx();
+    setHomeState({ kind: "mainCard" });
+    setCardBaseY(0);
+    setDragOffset(0);
+  }, []);
+
   const shelfYears = useMemo(() => {
     const years = new Set(entries.map((e) => e.year));
     years.add(currentYear);
@@ -78,8 +95,6 @@ export function ContentView({
   );
 
   const liveY = cardBaseY + dragOffset;
-  const shelfSnapY = () =>
-    (containerRef.current?.clientHeight ?? 800) * 0.76;
 
   const clampDrag = (d: number) =>
     isMainCard
@@ -168,9 +183,7 @@ export function ContentView({
           years={shelfYears}
           onYearTap={(year) => {
             if (year === currentYear) {
-              setHomeState({ kind: "mainCard" });
-              setCardBaseY(0);
-              setDragOffset(0);
+              snapToMainCard();
             } else {
               setHomeState({ kind: "yearFocused", year });
             }
@@ -204,6 +217,7 @@ export function ContentView({
           horizontalPadding={28}
           showsIndicator={pagesCurrent.length > 1}
           indicatorColor="cream"
+          onGestureStart={preloadPaperSfx}
           onVerticalDrag={(dy) => {
             if (!isMainCard && !isShelf) return;
             setDragOffset(clampDrag(dy));
@@ -211,13 +225,9 @@ export function ContentView({
           onVerticalEnd={(dy) => {
             if (!isMainCard && !isShelf) return;
             if (isMainCard && dy > 120) {
-              setHomeState({ kind: "shelf" });
-              setCardBaseY(shelfSnapY());
-              setDragOffset(0);
+              snapToShelf();
             } else if (isShelf && dy < -80) {
-              setHomeState({ kind: "mainCard" });
-              setCardBaseY(0);
-              setDragOffset(0);
+              snapToMainCard();
             } else {
               setDragOffset(0);
             }
@@ -225,9 +235,7 @@ export function ContentView({
           onTapEntry={(absIdx) => {
             if (!isMainCard && !isShelf) return;
             if (isShelf) {
-              setHomeState({ kind: "mainCard" });
-              setCardBaseY(0);
-              setDragOffset(0);
+              snapToMainCard();
             } else if (absIdx >= 0) {
               const yr = recordsFor(currentYear);
               if (absIdx < yr.length) {

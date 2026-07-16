@@ -29,8 +29,11 @@ cp .env.local.example .env.local
 3. In Google Cloud Console, create an OAuth 2.0 Web client. Authorized redirect URI:
    `https://<project-ref>.supabase.co/auth/v1/callback`
 4. In Supabase **Authentication → URL Configuration**, set:
-   - Site URL: `http://localhost:3000` (and your Vercel URL in production)
-   - Redirect URLs: `http://localhost:3000/auth/callback` (and `https://your-app.vercel.app/auth/callback`)
+   - **Site URL** (production): your Vercel URL, e.g. `https://bookish-chat.vercel.app`  
+     Do **not** leave Site URL as `http://localhost:3000` after deploying — Google login will bounce back to localhost.
+   - **Redirect URLs** (add all that you use):
+     - `https://bookish-chat.vercel.app/auth/callback`
+     - `http://localhost:3000/auth/callback`
 5. **SQL Editor** — run [`supabase/migrations/001_init.sql`](supabase/migrations/001_init.sql)
 6. Copy Project URL + anon key into `.env.local`
 
@@ -57,8 +60,12 @@ Open [http://localhost:3000](http://localhost:3000).
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
    - `DEEPSEEK_API_KEY`
-4. Add your Vercel URL to Supabase redirect URLs (and Google OAuth if needed)
-5. Deploy
+4. **Required for Google login on Vercel** — in Supabase → Authentication → URL Configuration:
+   - Site URL → `https://bookish-chat.vercel.app` (or your custom domain)
+   - Redirect URLs → include `https://bookish-chat.vercel.app/auth/callback` **and** `http://localhost:3000/auth/callback`
+5. Deploy (or redeploy if URLs were wrong after the first deploy)
+
+If login still lands on `localhost:3000/?code=...`, the Vercel callback URL is missing from Redirect URLs and Supabase is falling back to Site URL.
 
 ## Project layout
 

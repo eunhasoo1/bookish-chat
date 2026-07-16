@@ -12,6 +12,7 @@ type Props = {
   horizontalPadding?: number;
   showsIndicator?: boolean;
   indicatorColor?: string;
+  onGestureStart?: () => void;
   onVerticalDrag?: (dy: number) => void;
   onVerticalEnd?: (dy: number) => void;
   onTapEntry?: (absIdx: number) => void;
@@ -28,6 +29,7 @@ export function LibraryCardStack({
   horizontalPadding = 28,
   showsIndicator = true,
   indicatorColor = "#fff",
+  onGestureStart,
   onVerticalDrag,
   onVerticalEnd,
   onTapEntry,
@@ -51,6 +53,18 @@ export function LibraryCardStack({
   const startRef = useRef<{ x: number; y: number } | null>(null);
   const didDragRef = useRef(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const leavingPageIdxRef = useRef(leavingPageIdx);
+  leavingPageIdxRef.current = leavingPageIdx;
+  const isMultiPageRef = useRef(isMultiPage);
+  isMultiPageRef.current = isMultiPage;
+  const dragXRef = useRef(dragX);
+  dragXRef.current = dragX;
+  const topIndexRef = useRef(topIndex);
+  topIndexRef.current = topIndex;
+  const onVerticalDragRef = useRef(onVerticalDrag);
+  onVerticalDragRef.current = onVerticalDrag;
+  const onVerticalEndRef = useRef(onVerticalEnd);
+  onVerticalEndRef.current = onVerticalEnd;
 
   useEffect(() => {
     if (topIndex >= Math.max(1, n)) {
@@ -61,9 +75,9 @@ export function LibraryCardStack({
   const circularIdx = (slot: number) => (topIndex + slot) % n;
 
   const commitSwipe = (direction: number, flyDist: number) => {
-    if (leavingPageIdx !== null) return;
-    const departIdx = topIndex;
-    setLeavingOffsetX(dragX);
+    if (leavingPageIdxRef.current !== null) return;
+    const departIdx = topIndexRef.current;
+    setLeavingOffsetX(dragXRef.current);
     setLeavingScale(1);
     setLeavingPageIdx(departIdx);
     setLeavingOffsetX(direction * flyDist);
@@ -82,61 +96,62 @@ export function LibraryCardStack({
     }, 180);
   };
 
+  // Window listeners (not setPointerCapture) so row overlay clicks still fire.
   const onPointerDown = (e: React.PointerEvent) => {
-    // Capture on the stack container (currentTarget), not the row overlay
-    // (e.target) — otherwise move/up never reach these handlers.
-    (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
     startRef.current = { x: e.clientX, y: e.clientY };
     axisRef.current = null;
     didDragRef.current = false;
-  };
+    onGestureStart?.();
 
-  const onPointerMove = (e: React.PointerEvent) => {
-    if (!startRef.current || leavingPageIdx !== null) return;
-    const dx = e.clientX - startRef.current.x;
-    const dy = e.clientY - startRef.current.y;
+    const onMove = (ev: PointerEvent) => {
+      if (!startRef.current || leavingPageIdxRef.current !== null) return;
+      const dx = ev.clientX - startRef.current.x;
+      const dy = ev.clientY - startRef.current.y;
 
-    if (axisRef.current === null) {
-      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
-      axisRef.current = Math.abs(dx) > Math.abs(dy) ? "h" : "v";
-      didDragRef.current = true;
-    }
+      if (axisRef.current === null) {
+        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+        axisRef.current = Math.abs(dx) > Math.abs(dy) ? "h" : "v";
+        didDragRef.current = true;
+      }
 
-    if (axisRef.current === "h" && isMultiPage) {
-      setDragX(dx);
-    } else if (axisRef.current === "v") {
-      onVerticalDrag?.(dy);
-    }
-  };
+      if (axisRef.current === "h" && isMultiPageRef.current) {
+        setDragX(dx);
+      } else if (axisRef.current === "v") {
+        onVerticalDragRef.current?.(dy);
+      }
+    };
 
-  const onPointerUp = (e: React.PointerEvent) => {
-    if (!startRef.current) return;
-    const dx = e.clientX - startRef.current.x;
-    const dy = e.clientY - startRef.current.y;
-    const locked = axisRef.current;
-    axisRef.current = null;
-    startRef.current = null;
+    const onUp = (ev: PointerEvent) => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
 
-    const width = containerRef.current?.clientWidth ?? 390;
-    const flyDist = width * 1.25;
+      if (!startRef.current) return;
+      const dx = ev.clientX - startRef.current.x;
+      const dy = ev.clientY - startRef.current.y;
+      const locked = axisRef.current;
+      axisRef.current = null;
+      startRef.current = null;
 
-    if (locked === "h" && isMultiPage) {
-      if (Math.abs(dx) > 60) {
-        commitSwipe(dx < 0 ? -1 : 1, flyDist);
+      const width = containerRef.current?.clientWidth ?? 390;
+      const flyDist = width * 1.25;
+
+      if (locked === "h" && isMultiPageRef.current) {
+        if (Math.abs(dx) > 60) {
+          commitSwipe(dx < 0 ? -1 : 1, flyDist);
+        } else {
+          setDragX(0);
+        }
+      } else if (locked === "v") {
+        onVerticalEndRef.current?.(dy);
       } else {
         setDragX(0);
       }
-    } else if (locked === "v") {
-      onVerticalEnd?.(dy);
-    } else {
-      setDragX(0);
-    }
+    };
 
-    // Suppress the click that follows a drag gesture
-    if (didDragRef.current) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
   };
 
   const renderDeckCard = (slot: number) => {
@@ -207,9 +222,6 @@ export function LibraryCardStack({
           touchAction: "none",
         }}
         onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerCancel={onPointerUp}
       >
         <LibraryCard
           year={year}
@@ -229,9 +241,6 @@ export function LibraryCardStack({
       className="relative flex h-full w-full flex-col items-center justify-center pb-[18px]"
       style={{ touchAction: "none" }}
       onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-      onPointerCancel={onPointerUp}
     >
       <div className="relative w-full" style={{ minHeight: 760 }}>
         {Array.from({ length: visibleSlots }, (_, i) => visibleSlots - 1 - i).map(
