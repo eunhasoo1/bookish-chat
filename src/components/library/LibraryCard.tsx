@@ -9,7 +9,6 @@ import {
   RIGHT_W,
   ROW_COUNT,
   ROW_H,
-  RULED_AREA_TOP,
 } from "@/lib/tokens";
 import type { BookEntry } from "@/lib/types";
 
@@ -80,6 +79,29 @@ export function LibraryCard({
     action?.(row);
   };
 
+  const rowTapLayer = (i: number) =>
+    onTapRow ? (
+      <div className="absolute inset-0 z-[1] flex">
+        <div
+          className="cursor-pointer"
+          style={{ width: LEFT_W + GAP }}
+          onClick={() => handleTap(i, onTapEditZone)}
+          onPointerDown={(e) => startLongPress(i, e)}
+        />
+        <div
+          className="flex-1 cursor-pointer"
+          onClick={() => handleTap(i, onTapRow)}
+          onPointerDown={(e) => startLongPress(i, e)}
+        />
+        <div
+          className="cursor-pointer"
+          style={{ width: GAP + RIGHT_W }}
+          onClick={() => handleTap(i, onTapEditZone)}
+          onPointerDown={(e) => startLongPress(i, e)}
+        />
+      </div>
+    ) : null;
+
   return (
     <div className="relative w-full select-none" style={{ touchAction: "none" }}>
       <div
@@ -91,8 +113,18 @@ export function LibraryCard({
           boxShadow: "0 6px 12px rgba(0,0,0,0.45)",
         }}
       >
-        {/* Header */}
-        <div style={{ borderBottom: `1.5px solid ${colors.inkBlue}` }}>
+        {/* Header — tap target only on card header, not column labels */}
+        <div
+          className="relative"
+          style={{ borderBottom: `1.5px solid ${colors.inkBlue}` }}
+        >
+          {onTapRow ? (
+            <div
+              className="absolute inset-0 z-[1] cursor-pointer"
+              onClick={() => handleTap(-1, onTapRow)}
+              onPointerDown={(e) => startLongPress(-1, e)}
+            />
+          ) : null}
           <div className="flex items-center py-2">
             <div className="flex-1 pl-3 text-left" style={{ color: colors.inkBlue }}>
               <div style={{ fontFamily: fonts.serif, fontSize: 11 }}>From the</div>
@@ -237,8 +269,9 @@ export function LibraryCard({
                 className="absolute left-0 right-0 flex items-center"
                 style={{ top: i * ROW_H, height: ROW_H }}
               >
+                {rowTapLayer(i)}
                 {e ? (
-                  <>
+                  <div className="pointer-events-none flex w-full items-center">
                     <div
                       className="pl-[5px] text-left leading-tight"
                       style={{
@@ -277,9 +310,9 @@ export function LibraryCard({
                     >
                       {e.rate}
                     </div>
-                  </>
+                  </div>
                 ) : i === entries.length && onTapRow ? (
-                  <>
+                  <div className="pointer-events-none flex w-full items-center">
                     <div style={{ width: LEFT_W }} />
                     <div
                       className="flex-1 pl-2.5 text-left"
@@ -292,46 +325,13 @@ export function LibraryCard({
                       +
                     </div>
                     <div style={{ width: RIGHT_W }} />
-                  </>
+                  </div>
                 ) : null}
               </div>
             );
           })}
         </div>
       </div>
-
-      {/* Tap overlay */}
-      {onTapRow ? (
-        <div className="absolute inset-0 overflow-hidden" style={{ borderRadius: 2 }}>
-          <div
-            className="w-full cursor-pointer"
-            style={{ height: RULED_AREA_TOP }}
-            onClick={() => handleTap(-1, onTapRow)}
-            onPointerDown={(e) => startLongPress(-1, e)}
-          />
-          {Array.from({ length: ROW_COUNT }, (_, i) => (
-            <div key={i} className="flex" style={{ height: ROW_H }}>
-              <div
-                className="cursor-pointer"
-                style={{ width: LEFT_W + GAP }}
-                onClick={() => handleTap(i, onTapEditZone)}
-                onPointerDown={(e) => startLongPress(i, e)}
-              />
-              <div
-                className="flex-1 cursor-pointer"
-                onClick={() => handleTap(i, onTapRow)}
-                onPointerDown={(e) => startLongPress(i, e)}
-              />
-              <div
-                className="cursor-pointer"
-                style={{ width: GAP + RIGHT_W }}
-                onClick={() => handleTap(i, onTapEditZone)}
-                onPointerDown={(e) => startLongPress(i, e)}
-              />
-            </div>
-          ))}
-        </div>
-      ) : null}
     </div>
   );
 }

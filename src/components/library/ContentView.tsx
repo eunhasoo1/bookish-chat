@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { colors } from "@/lib/tokens";
-import { playPaperSfx, preloadPaperSfx } from "@/lib/sfx";
+import { playCardSfx, playChatSfx, playEditSfx, preloadSfx } from "@/lib/sfx";
 import type {
   BookEntry,
   BookEntryRecord,
@@ -46,7 +46,7 @@ export function ContentView({
   const isShelf = homeState.kind === "shelf";
 
   const snapToShelf = useCallback(() => {
-    playPaperSfx();
+    playCardSfx();
     setHomeState({ kind: "shelf" });
     setCardBaseY(
       (containerRef.current?.clientHeight ?? 800) * 0.76
@@ -55,11 +55,16 @@ export function ContentView({
   }, []);
 
   const snapToMainCard = useCallback(() => {
-    playPaperSfx();
+    playCardSfx();
     setHomeState({ kind: "mainCard" });
     setCardBaseY(0);
     setDragOffset(0);
   }, []);
+
+  const openChat = useCallback((record: BookEntryRecord) => {
+    playChatSfx();
+    setChatRequest({ record, userName });
+  }, [userName]);
 
   const shelfYears = useMemo(() => {
     const years = new Set(entries.map((e) => e.year));
@@ -106,6 +111,7 @@ export function ContentView({
         : Math.min(30, d * 0.25);
 
   const makeEditRequest = (year: number, absIdx: number) => {
+    playEditSfx();
     const yearRecords = recordsFor(year);
     const record = absIdx < yearRecords.length ? yearRecords[absIdx] : null;
     const entry = record
@@ -217,7 +223,7 @@ export function ContentView({
           horizontalPadding={28}
           showsIndicator={pagesCurrent.length > 1}
           indicatorColor="cream"
-          onGestureStart={preloadPaperSfx}
+          onGestureStart={preloadSfx}
           onVerticalDrag={(dy) => {
             if (!isMainCard && !isShelf) return;
             setDragOffset(clampDrag(dy));
@@ -239,7 +245,7 @@ export function ContentView({
             } else if (absIdx >= 0) {
               const yr = recordsFor(currentYear);
               if (absIdx < yr.length) {
-                setChatRequest({ record: yr[absIdx], userName });
+                openChat(yr[absIdx]);
               } else {
                 makeEditRequest(currentYear, absIdx);
               }
@@ -266,7 +272,7 @@ export function ContentView({
             if (absIdx < 0) return;
             const yearRecords = recordsFor(yr);
             if (absIdx < yearRecords.length) {
-              setChatRequest({ record: yearRecords[absIdx], userName });
+              openChat(yearRecords[absIdx]);
             } else {
               makeEditRequest(yr, absIdx);
             }

@@ -1,81 +1,104 @@
-const PAPER_SFX_FILE =
-  "ES_Computers, Keyboard & Mouse, Mouse, Macbook Pro, Trackpad, Movement - Epidemic Sound - 2225-2943.wav";
-const PAPER_SFX_URL = `/sfx/${encodeURIComponent(PAPER_SFX_FILE)}`;
+type SfxId = "card" | "edit" | "chat";
 
-/** Skip quiet lead-in before the trackpad movement attack. */
-const ATTACK_OFFSET = 0.12;
-/** Play the useful movement portion. */
-const PLAY_DURATION = 0.5;
+type SfxSpec = {
+  file: string;
+  attackOffset: number;
+  playDuration: number;
+  pitchMin: number;
+  pitchMax: number;
+};
 
-const PITCH_MIN = 0.9;
-const PITCH_MAX = 1.15;
+const SFX: Record<SfxId, SfxSpec> = {
+  card: {
+    file: "ES_Computers, Keyboard & Mouse, Mouse, Macbook Pro, Trackpad, Movement - Epidemic Sound - 2225-2943.wav",
+    attackOffset: 0.12,
+    playDuration: 0.5,
+    pitchMin: 0.9,
+    pitchMax: 1.15,
+  },
+  edit: {
+    file: "ES_Objects, Writing, Writing Letters, Soft Pencil - Epidemic Sound - 2489-3246.wav",
+    attackOffset: 0.3,
+    playDuration: 0.55,
+    pitchMin: 1,
+    pitchMax: 1.2,
+  },
+  chat: {
+    file: "ES_Computers, Keyboard & Mouse, Keyboard, Razer, Backspace, Hits 02 - Epidemic Sound - 0000-0178.wav",
+    attackOffset: 0.03,
+    playDuration: 0.15,
+    pitchMin: 0.9,
+    pitchMax: 1.15,
+  },
+};
 
 let audioCtx: AudioContext | null = null;
-let paperBuffer: AudioBuffer | null = null;
-let loadPromise: Promise<AudioBuffer | null> | null = null;
+let unlocked = false;
+const buffers = new Map<SfxId, AudioBuffer>();
+const loadPromises = new Map<SfxId, Promise<AudioBuffer | null>>();
 
 function getAudioContext(): AudioContext {
   if (!audioCtx) {
-    audioCtx = new AudioContext();
+    const AC =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext })
+        .webkitAudioContext;
+    audioCtx = new AC();
   }
   return audioCtx;
 }
 
-async function loadPaperBuffer(): Promise<AudioBuffer | null> {
-  if (paperBuffer) return paperBuffer;
-  if (loadPromise) return loadPromise;
+function sfxUrl(file: string): string {
+  return `/sfx/${encodeURIComponent(file)}`;
+}
 
-  loadPromise = (async () => {
+async function loadBuffer(id: SfxId): Promise<AudioBuffer | null> {
+  const cached = buffers.get(id);
+  if (cached) return cached;
+
+  const existing = loadPromises.get(id);
+  if (existing) return existing;
+
+  const promise = (async () => {
     try {
       const ctx = getAudioContext();
-      const res = await fetch(PAPER_SFX_URL);
+      const res = await fetch(sfxUrl(SFX[id].file));
       if (!res.ok) return null;
       const data = await res.arrayBuffer();
-      paperBuffer = await ctx.decodeAudioData(data.slice(0));
-      return paperBuffer;
+      const buffer = await ctx.decodeAudioData(data.slice(0));
+      buffers.set(id, buffer);
+      return buffer;
     } catch {
       return null;
     }
   })();
 
-  return loadPromise;
+  loadPromises.set(id, promise);
+  return promise;
 }
 
-function startPaperSource(ctx: AudioContext, buffer: AudioBuffer): void {
+function startSource(ctx: AudioContext, id: SfxId, buffer: AudioBuffer): void {
+  const spec = SFX[id];
   const source = ctx.createBufferSource();
   source.buffer = buffer;
-  const rate = PITCH_MIN + Math.random() * (PITCH_MAX - PITCH_MIN);
-  source.playbackRate.value = rate;
+  source.playbackRate.value =
+    spec.pitchMin + Math.random() * (spec.pitchMax - spec.pitchMin);
   source.connect(ctx.destination);
-  const when = ctx.currentTime;
-  source.start(when, ATTACK_OFFSET, PLAY_DURATION);
+  source.start(ctx.currentTime, spec.attackOffset, spec.playDuration);
 }
 
-/** Warm AudioContext + decode buffer early so snap play is instant. */
-export function preloadPaperSfx(): void {
-  void (async () => {
-    try {
-      const ctx = getAudioContext();
-      if (ctx.state === "suspended") {
-        await ctx.resume();
-      }
-      await loadPaperBuffer();
-    } catch {
-      // Non-fatal
-    }
-  })();
-}
-
-/**
- * Play the paper-handle SFX with a slight random pitch.
- * When preloaded, starts synchronously so it lines up with the snap animation.
- */
-export function playPaperSfx(): void {
+function playSfx(id: SfxId): void {
   try {
     const ctx = getAudioContext();
 
-    if (paperBuffer && ctx.state === "running") {
-      startPaperSource(ctx, paperBuffer);
+    // Kick resume in this call stack (click/gesture); don't wait for "running".
+    if (ctx.state === "suspended") {
+      void ctx.resume();
+    }
+
+    const ready = buffers.get(id);
+    if (ready) {
+      startSource(ctx, id, ready);
       return;
     }
 
@@ -84,9 +107,9 @@ export function playPaperSfx(): void {
         if (ctx.state === "suspended") {
           await ctx.resume();
         }
-        const buffer = await loadPaperBuffer();
+        const buffer = await loadBuffer(id);
         if (!buffer) return;
-        startPaperSource(ctx, buffer);
+        startSource(ctx, id, buffer);
       } catch {
         // Autoplay / decode failures are non-fatal
       }
@@ -94,4 +117,55 @@ export function playPaperSfx(): void {
   } catch {
     // Non-fatal
   }
+}
+
+/**
+ * Call from a user-gesture handler (pointerdown).
+ * Unlocks AudioContext in the gesture stack and preloads all SFX buffers.
+ */
+export function preloadSfx(): void {
+  try {
+    const ctx = getAudioContext();
+
+    if (ctx.state === "suspended") {
+      void ctx.resume();
+    }
+
+    if (!unlocked) {
+      unlocked = true;
+      const silent = ctx.createBuffer(1, 1, ctx.sampleRate);
+      const tick = ctx.createBufferSource();
+      tick.buffer = silent;
+      tick.connect(ctx.destination);
+      tick.start(0);
+    }
+
+    // Prefer edit/chat first — those play on the same click gesture.
+    void loadBuffer("edit");
+    void loadBuffer("chat");
+    void loadBuffer("card");
+  } catch {
+    // Non-fatal
+  }
+}
+
+/** @deprecated use preloadSfx */
+export const preloadPaperSfx = preloadSfx;
+
+/** Card snap (shelf ↔ main) */
+export function playCardSfx(): void {
+  playSfx("card");
+}
+
+/** @deprecated use playCardSfx */
+export const playPaperSfx = playCardSfx;
+
+/** Open book edit sheet */
+export function playEditSfx(): void {
+  playSfx("edit");
+}
+
+/** Open book chat */
+export function playChatSfx(): void {
+  playSfx("chat");
 }
