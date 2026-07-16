@@ -33,7 +33,8 @@ const SFX: Record<SfxId, SfxSpec> = {
 };
 
 let audioCtx: AudioContext | null = null;
-let unlocked = false;
+/** Chains resume() calls started during pointerdown so pointerup can play after. */
+let resumePromise: Promise<void> = Promise.resolve();
 const buffers = new Map<SfxId, AudioBuffer>();
 const loadPromises = new Map<SfxId, Promise<AudioBuffer | null>>();
 
@@ -87,33 +88,73 @@ function startSource(ctx: AudioContext, id: SfxId, buffer: AudioBuffer): void {
   source.start(ctx.currentTime, spec.attackOffset, spec.playDuration);
 }
 
-function playSfx(id: SfxId): void {
+function chainResume(): void {
+  const ctx = getAudioContext();
+  resumePromise = resumePromise.then(async () => {
+    if (ctx.state === "suspended") {
+      await ctx.resume();
+    }
+  });
+}
+
+function playSilentTick(): void {
   try {
     const ctx = getAudioContext();
+    const silent = ctx.createBuffer(1, 1, ctx.sampleRate);
+    const tick = ctx.createBufferSource();
+    tick.buffer = silent;
+    tick.connect(ctx.destination);
+    tick.start(0);
+  } catch {
+    // Non-fatal
+  }
+}
 
-    // Kick resume in this call stack (click/gesture); don't wait for "running".
-    if (ctx.state === "suspended") {
-      void ctx.resume();
-    }
+function playSfx(id: SfxId): void {
+  try {
+    unlockSfx();
 
+    const ctx = getAudioContext();
     const ready = buffers.get(id);
-    if (ready) {
+    if (ready && ctx.state === "running") {
       startSource(ctx, id, ready);
       return;
     }
 
-    void (async () => {
+    void resumePromise.then(async () => {
       try {
-        if (ctx.state === "suspended") {
+        const c = getAudioContext();
+        if (c.state !== "running") {
+          await c.resume();
+        }
+        const buffer = buffers.get(id) ?? (await loadBuffer(id));
+        if (!buffer) return;
+        startSource(c, id, buffer);
+      } catch {
+        // Autoplay / decode failures are non-fatal
+      }
+    });
+  } catch {
+    // Non-fatal
+  }
+}
+
+/** Play after resume() from the same gesture's pointerdown (for fast pointerup snap). */
+function playSfxAfterResume(id: SfxId): void {
+  try {
+    void resumePromise.then(async () => {
+      try {
+        const ctx = getAudioContext();
+        if (ctx.state !== "running") {
           await ctx.resume();
         }
-        const buffer = await loadBuffer(id);
+        const buffer = buffers.get(id) ?? (await loadBuffer(id));
         if (!buffer) return;
         startSource(ctx, id, buffer);
       } catch {
         // Autoplay / decode failures are non-fatal
       }
-    })();
+    });
   } catch {
     // Non-fatal
   }
@@ -134,20 +175,8 @@ export function warmSfxBuffers(): void {
  */
 export function unlockSfx(): void {
   try {
-    const ctx = getAudioContext();
-
-    if (ctx.state === "suspended") {
-      void ctx.resume();
-    }
-
-    if (!unlocked) {
-      unlocked = true;
-      const silent = ctx.createBuffer(1, 1, ctx.sampleRate);
-      const tick = ctx.createBufferSource();
-      tick.buffer = silent;
-      tick.connect(ctx.destination);
-      tick.start(0);
-    }
+    chainResume();
+    playSilentTick();
   } catch {
     // Non-fatal
   }
@@ -171,9 +200,9 @@ export function preloadSfx(): void {
 /** @deprecated use preloadSfx */
 export const preloadPaperSfx = preloadSfx;
 
-/** Card snap (shelf ↔ main) */
+/** Card snap (shelf ↔ main) — waits for resume from pointerdown before playing. */
 export function playCardSfx(): void {
-  playSfx("card");
+  playSfxAfterResume("card");
 }
 
 /** @deprecated use playCardSfx */

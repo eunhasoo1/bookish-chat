@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { unlockSfx } from "@/lib/sfx";
 import { colors, fonts } from "@/lib/tokens";
 import type { BookEntry } from "@/lib/types";
 import { LibraryCard } from "./LibraryCard";
@@ -112,6 +113,15 @@ export function LibraryCardStack({
         if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
         axisRef.current = Math.abs(dx) > Math.abs(dy) ? "h" : "v";
         didDragRef.current = true;
+
+        if (axisRef.current === "v") {
+          unlockSfx();
+          try {
+            containerRef.current?.setPointerCapture(ev.pointerId);
+          } catch {
+            // Non-fatal
+          }
+        }
       }
 
       if (axisRef.current === "h" && isMultiPageRef.current) {
