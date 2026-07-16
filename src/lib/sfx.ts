@@ -120,10 +120,19 @@ function playSfx(id: SfxId): void {
 }
 
 /**
- * Call from a user-gesture handler (pointerdown).
- * Unlocks AudioContext in the gesture stack and preloads all SFX buffers.
+ * Fetch + decode all SFX buffers (no user gesture required).
+ * Call once when the library view mounts so the first swipe can play instantly.
  */
-export function preloadSfx(): void {
+export function warmSfxBuffers(): void {
+  void loadBuffer("card");
+  void loadBuffer("edit");
+  void loadBuffer("chat");
+}
+
+/**
+ * Unlock AudioContext during a user gesture (pointerdown / click).
+ */
+export function unlockSfx(): void {
   try {
     const ctx = getAudioContext();
 
@@ -139,11 +148,21 @@ export function preloadSfx(): void {
       tick.connect(ctx.destination);
       tick.start(0);
     }
+  } catch {
+    // Non-fatal
+  }
+}
 
-    // Prefer edit/chat first — those play on the same click gesture.
+/**
+ * Call from a user-gesture handler (pointerdown).
+ * Unlocks AudioContext and ensures buffers are loading (card first).
+ */
+export function preloadSfx(): void {
+  try {
+    unlockSfx();
+    void loadBuffer("card");
     void loadBuffer("edit");
     void loadBuffer("chat");
-    void loadBuffer("card");
   } catch {
     // Non-fatal
   }

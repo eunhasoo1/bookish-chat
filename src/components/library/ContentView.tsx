@@ -1,9 +1,15 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { colors } from "@/lib/tokens";
-import { playCardSfx, playChatSfx, playEditSfx, preloadSfx } from "@/lib/sfx";
+import {
+  playCardSfx,
+  playChatSfx,
+  playEditSfx,
+  preloadSfx,
+  warmSfxBuffers,
+} from "@/lib/sfx";
 import type {
   BookEntry,
   BookEntryRecord,
@@ -44,6 +50,10 @@ export function ContentView({
 
   const isMainCard = homeState.kind === "mainCard";
   const isShelf = homeState.kind === "shelf";
+
+  useEffect(() => {
+    warmSfxBuffers();
+  }, []);
 
   const snapToShelf = useCallback(() => {
     playCardSfx();
@@ -180,6 +190,7 @@ export function ContentView({
       ref={containerRef}
       className="relative h-full w-full overflow-hidden"
       style={{ background: colors.oakBrown }}
+      onPointerDown={preloadSfx}
     >
       <div
         className="absolute inset-0"
